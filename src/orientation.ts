@@ -25,7 +25,7 @@ export class Orientation {
     dx: number;
     labelOffset: number;
 
-    constructor(flatTop: boolean = true, swapEvenOdd: boolean = false) {
+    constructor(flatTop = true, swapEvenOdd = false) {
         this.flatTop = flatTop;
         this.swapEvenOdd = swapEvenOdd;
         if (this.flatTop) {
@@ -96,7 +96,7 @@ export class Orientation {
         }
     }
 
-    pixels(pt: Point, offsetX: number = 0, offsetY: number = 0): Point {
+    pixels(pt: Point, offsetX = 0, offsetY = 0): Point {
         if (this.flatTop) {
             const evenOdd = (this.swapEvenOdd ? 1 : 0) * (pt.x % 2);
             const x = (pt.x * this.dx * 3) / 2 + offsetX;

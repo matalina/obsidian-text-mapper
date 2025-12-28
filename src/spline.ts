@@ -132,7 +132,7 @@ export class Spline {
 
             const x = from.x + delta[offset][i].x;
             const y = from.y + delta[offset][i].y;
-            let d = (to.x - x) * (to.x - x) + (to.y - y) * (to.y - y);
+            const d = (to.x - x) * (to.x - x) + (to.y - y) * (to.y - y);
             if (min === undefined || d < min) {
                 min = d;
                 best = new Point(x, y);
@@ -142,7 +142,7 @@ export class Spline {
         return best;
     }
 
-    partway(from: Point, to: Point, lerp: number = 1): Point {
+    partway(from: Point, to: Point, lerp = 1): Point {
         const pix1 = this.orientation.pixels(from);
         const pix2 = this.orientation.pixels(to);
         return new Point(
@@ -167,17 +167,17 @@ export class Spline {
 
         if (closed) {
             for (let i = 0; i < points.length - 1; i++) {
-                let current = points[i];
-                let next = points[i + 1];
+                const current = points[i];
+                const next = points[i + 1];
                 if (path.length === 0) {
-                    let a = this.partway(current, next, 0.3).toString();
-                    let b = this.partway(current, next, 0.5).toString();
-                    let c = this.partway(
+                    const a = this.partway(current, next, 0.3).toString();
+                    const b = this.partway(current, next, 0.5).toString();
+                    const c = this.partway(
                         points[points.length - 1],
                         current,
                         0.7
                     ).toString();
-                    let d = this.partway(
+                    const d = this.partway(
                         points[points.length - 1],
                         current,
                         0.5
@@ -185,8 +185,8 @@ export class Spline {
                     path += `M${d} C${c} ${a} ${b}`;
                 } else {
                     // continue curve
-                    let b = this.partway(current, next, 0.5).toString();
-                    let a = this.partway(current, next, 0.3).toString();
+                    const b = this.partway(current, next, 0.5).toString();
+                    const a = this.partway(current, next, 0.3).toString();
                     path += ` S${a} ${b}`;
                 }
             }
@@ -197,13 +197,13 @@ export class Spline {
                 next = points[i + 1];
                 if (path.length === 0) {
                     // line from a to b; control point a required for following S commands
-                    let a = this.partway(current, next, 0.3).toString();
-                    let b = this.partway(current, next, 0.5).toString();
+                    const a = this.partway(current, next, 0.3).toString();
+                    const b = this.partway(current, next, 0.5).toString();
                     path += `M${a} C${b} ${a} ${b}`;
                 } else {
                     // continue curve
-                    let a = this.partway(current, next, 0.3).toString();
-                    let b = this.partway(current, next, 0.5).toString();
+                    const a = this.partway(current, next, 0.3).toString();
+                    const b = this.partway(current, next, 0.5).toString();
                     path += ` S${a} ${b}`;
                 }
             }

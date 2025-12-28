@@ -163,6 +163,7 @@ export class TextMapperParser {
         spline.start = match[5];
 
         let rest = line;
+        // eslint-disable-next-line no-constant-condition
         while (true) {
             let segment: string;
             [segment, rest] = this.splitPathSegments(rest);
@@ -176,7 +177,7 @@ export class TextMapperParser {
     }
 
     private splitPathSegments(splinePath: string): [string, string] {
-        let match = splinePath.match(SPLINE_ELEMENT_SPLIT_REGEX);
+        const match = splinePath.match(SPLINE_ELEMENT_SPLIT_REGEX);
         if (match === null) {
             return [null, splinePath];
         }

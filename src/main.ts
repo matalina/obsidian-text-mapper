@@ -3,10 +3,11 @@ import {
     MarkdownRenderChild,
     Plugin,
 } from "obsidian";
-import { APOCALYPSE } from "./apocalypse";
+//import { APOCALYPSE } from "./apocalypse";
 import { ParseError } from "./error";
-import { GNOMEYLAND } from "./gnomeyland";
+//import { GNOMEYLAND } from "./gnomeyland";
 import { TextMapperParser } from "./parser";
+import { TAG_AND_TALLY } from "./tag-and-tally";
 
 export default class TextMapperPlugin extends Plugin {
     async onload() {
@@ -40,10 +41,10 @@ export class TextMapper extends MarkdownRenderChild {
         super(containerEl);
         this.textMapperEl = this.containerEl.createDiv({ cls: "textmapper" });
 
-        const totalSource = source
-            .split("\n")
-            .concat(GNOMEYLAND.split("\n"))
-            .concat(APOCALYPSE.split("\n"));
+        const totalSource = TAG_AND_TALLY.split("\n")
+            .concat(source.split("\n"))
+            // .concat(GNOMEYLAND.split("\n"))
+            // .concat(APOCALYPSE.split("\n"));
 
         const parser = new TextMapperParser(docId);
         parser.process(totalSource);
