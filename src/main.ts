@@ -5,11 +5,12 @@ import {
     Notice,
     Plugin,
 } from "obsidian";
-//import { APOCALYPSE } from "./apocalypse";
+import { APOCALYPSE } from "./apocalypse";
 import { ParseError } from "./error";
-//import { GNOMEYLAND } from "./gnomeyland";
+import { GNOMEYLAND } from "./gnomeyland";
 import { TextMapperParser } from "./parser";
 import { TAG_AND_TALLY } from "./tag-and-tally";
+import { OPTION_REGEX } from "./constants";
 import {
     DEFAULT_SETTINGS,
     TextMapperSettings,
@@ -18,6 +19,7 @@ import {
 
 export default class TextMapperPlugin extends Plugin {
     settings: TextMapperSettings;
+    private activeMappers: Set<TextMapper> = new Set();
 
     async onload() {
         console.log("Loading Obsidian TextMapper.");
@@ -30,6 +32,20 @@ export default class TextMapperPlugin extends Plugin {
             "text-mapper",
             this.processMarkdown.bind(this)
         );
+    }
+
+    registerMapper(mapper: TextMapper) {
+        this.activeMappers.add(mapper);
+    }
+
+    unregisterMapper(mapper: TextMapper) {
+        this.activeMappers.delete(mapper);
+    }
+
+    refreshAllMappers() {
+        for (const mapper of this.activeMappers) {
+            mapper.refresh();
+        }
     }
 
     async loadSettings() {
@@ -46,7 +62,9 @@ export default class TextMapperPlugin extends Plugin {
         ctx: MarkdownPostProcessorContext
     ): Promise<any> {
         try {
-            ctx.addChild(new TextMapper(el, ctx.docId, source, this));
+            const mapper = new TextMapper(el, ctx.docId, source, this);
+            ctx.addChild(mapper);
+            this.registerMapper(mapper);
         } catch (e) {
             console.log("text mapper error", e);
             ctx.addChild(new ParseError(el));
@@ -56,12 +74,56 @@ export default class TextMapperPlugin extends Plugin {
     onunload() {}
 }
 
+/**
+ * Extract theme option from source code if present
+ * @param source The map source code
+ * @returns Theme name if found, null otherwise
+ */
+function getThemeFromSource(source: string): string | null {
+    const lines = source.split("\n");
+    for (const line of lines) {
+        if (line.startsWith("#")) {
+            continue;
+        }
+        if (OPTION_REGEX.test(line)) {
+            const match = line.match(OPTION_REGEX);
+            if (match) {
+                const optionStr = match[1].trim();
+                const tokens = optionStr.split(" ");
+                if (tokens.length >= 2 && tokens[0] === "theme") {
+                    return tokens[1].toLowerCase();
+                }
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Get the theme constant string based on theme name
+ * @param themeName The theme name (gnomeyland, apocalypse, or tag-and-tally)
+ * @returns The theme constant string
+ */
+function getThemeConstant(themeName: string): string {
+    switch (themeName.toLowerCase()) {
+        case "gnomeyland":
+            return GNOMEYLAND;
+        case "apocalypse":
+            return APOCALYPSE;
+        case "tag-and-tally":
+        default:
+            return TAG_AND_TALLY;
+    }
+}
+
 export class TextMapper extends MarkdownRenderChild {
     textMapperEl: HTMLDivElement;
     svgEl: SVGElement | null = null;
     svgDomElement: SVGSVGElement | null = null;
     parser: TextMapperParser | null = null;
     plugin: Plugin;
+    private source: string;
+    private docId: string;
     
     // Pan and zoom state
     panX: number = 0;
@@ -93,14 +155,52 @@ export class TextMapper extends MarkdownRenderChild {
     constructor(containerEl: HTMLElement, docId: string, source: string, plugin: Plugin) {
         super(containerEl);
         this.plugin = plugin;
+        this.source = source;
+        this.docId = docId;
         this.textMapperEl = this.containerEl.createDiv({ cls: "textmapper" });
 
-        const totalSource = TAG_AND_TALLY.split("\n")
-            .concat(source.split("\n"))
-            // .concat(GNOMEYLAND.split("\n"))
-            // .concat(APOCALYPSE.split("\n"));
+        this.render();
+        
+        // Register with plugin
+        if (plugin instanceof TextMapperPlugin) {
+            plugin.registerMapper(this);
+        }
+    }
 
-        this.parser = new TextMapperParser(docId);
+    onunload() {
+        // Unregister from plugin
+        if (this.plugin instanceof TextMapperPlugin) {
+            this.plugin.unregisterMapper(this);
+        }
+        super.onunload();
+    }
+
+    refresh() {
+        // Only refresh if this mapper doesn't have a theme override in source
+        // (mappers with theme override shouldn't change when default changes)
+        const themeFromSource = getThemeFromSource(this.source);
+        if (!themeFromSource) {
+            // Reset pan and zoom state
+            this.panX = 0;
+            this.panY = 0;
+            this.zoom = 1.0;
+            this.isDragging = false;
+            
+            this.textMapperEl.empty();
+            this.render();
+        }
+    }
+
+    private render() {
+        // Determine which theme to use
+        const themeFromSource = getThemeFromSource(this.source);
+        const themeName = themeFromSource || (this.plugin as TextMapperPlugin).settings.defaultTheme;
+        const themeConstant = getThemeConstant(themeName);
+
+        const totalSource = themeConstant.split("\n")
+            .concat(this.source.split("\n"));
+
+        this.parser = new TextMapperParser(this.docId);
         this.parser.process(totalSource);
         this.svgEl = this.parser.svg(this.textMapperEl);
         
