@@ -1,0 +1,17 @@
+.textmapper {
+    position: relative;
+    overflow: hidden;
+}
+
+.textmapper-svg {
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+.textmapper-svg:active {
+    cursor: grabbing;
+}

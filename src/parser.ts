@@ -259,6 +259,30 @@ export class TextMapperParser {
         } else if (option.key === "global") {
             option.valid = true;
             option.value = true;
+        } else if (option.key === "centered-at") {
+            option.valid = true;
+            // Parse centered-at option: 
+            // "option centered-at 0000" or "option centered-at 0402" (4-digit format)
+            // "option centered-at 05 10" (two separate numbers)
+            if (tokens.length >= 2) {
+                const coordStr = tokens[1];
+                
+                // Check if it's a 4-digit coordinate string (like "0402" or "0000")
+                if (coordStr.length === 4 && /^\d{4}$/.test(coordStr)) {
+                    const x = parseInt(coordStr.substring(0, 2), 10);
+                    const y = parseInt(coordStr.substring(2, 4), 10);
+                    if (!isNaN(x) && !isNaN(y)) {
+                        option.value = { x, y };
+                    }
+                } else if (tokens.length >= 3) {
+                    // Format: "option centered-at 05 10" (two separate tokens)
+                    const x = parseInt(tokens[1], 10);
+                    const y = parseInt(tokens[2], 10);
+                    if (!isNaN(x) && !isNaN(y)) {
+                        option.value = { x, y };
+                    }
+                }
+            }
         }
 
         // If the option is valid, then set it in this.options. It can now be
@@ -282,33 +306,88 @@ export class TextMapperParser {
         // return `<polygon ${attributes} points="${points}" />`;
     }
 
+    /**
+     * Calculate content bounds (min/max x/y) for pan limit calculations
+     */
+    getContentBounds(): { minX: number; maxX: number; minY: number; maxY: number } | null {
+        if (this.regions.length === 0) {
+            return null;
+        }
+
+        const [vx1, vy1, vx2, vy2] = this.orientation.viewbox(this.regions);
+        return {
+            minX: vx1,
+            maxX: vx2,
+            minY: vy1,
+            maxY: vy2,
+        };
+    }
+
+    /**
+     * Calculate initial center point for viewBox
+     * Priority: 1. centered-at option, 2. hex (0,0), 3. first hex, 4. (0,0) coordinate space
+     */
+    getInitialCenter(): Point {
+        // 1. Check if centered-at option is specified
+        if (this.options["centered-at"] && typeof this.options["centered-at"] === "object") {
+            const center = this.options["centered-at"];
+            return this.orientation.pixels(new Point(center.x, center.y));
+        }
+
+        // 2. Check if hex (0, 0) exists in regions
+        const hex00 = this.regions.find((r) => r.x === 0 && r.y === 0);
+        if (hex00) {
+            return this.orientation.pixels(new Point(0, 0));
+        }
+
+        // 3. Use first hex in regions list
+        if (this.regions.length > 0) {
+            const firstRegion = this.regions[0];
+            return this.orientation.pixels(new Point(firstRegion.x, firstRegion.y));
+        }
+
+        // 4. Fallback to (0, 0) coordinate space
+        return this.orientation.pixels(new Point(0, 0));
+    }
+
     svgHeader(el: HTMLElement): SVGElement {
         if (this.regions.length == 0) {
             // @ts-ignore
             return el.createSvg("svg");
         }
 
-        const [vx1, vy1, vx2, vy2] = this.orientation.viewbox(this.regions);
-        const width = (vx2 - vx1).toFixed(0);
-        const height = (vy2 - vy1).toFixed(0);
+        // Use fixed viewBox dimensions (800x600 as default)
+        // The actual viewBox will be controlled by pan/zoom in TextMapper
+        const fixedWidth = 800;
+        const fixedHeight = 600;
+        const initialCenter = this.getInitialCenter();
+        
+        // Calculate initial viewBox centered on initial center point
+        const viewBoxX = initialCenter.x - fixedWidth / 2;
+        const viewBoxY = initialCenter.y - fixedHeight / 2;
 
         // @ts-ignore
         const svgEl: SVGElement = el.createSvg("svg", {
             attr: {
                 "xmlns:xlink": "http://www.w3.org/1999/xlink",
-                viewBox: `${vx1} ${vy1} ${width} ${height}`,
+                viewBox: `${viewBoxX} ${viewBoxY} ${fixedWidth} ${fixedHeight}`,
+                class: "textmapper-svg",
             },
         });
 
-        svgEl.createSvg("rect", {
-            attr: {
-                x: vx1,
-                y: vy1,
-                width: width,
-                height: height,
-                fill: "white",
-            },
-        });
+        // Create background rect covering the full content bounds
+        const contentBounds = this.getContentBounds();
+        if (contentBounds) {
+            svgEl.createSvg("rect", {
+                attr: {
+                    x: contentBounds.minX,
+                    y: contentBounds.minY,
+                    width: (contentBounds.maxX - contentBounds.minX).toFixed(0),
+                    height: (contentBounds.maxY - contentBounds.minY).toFixed(0),
+                    fill: "white",
+                },
+            });
+        }
 
         return svgEl;
     }
