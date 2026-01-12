@@ -100,6 +100,34 @@ function getThemeFromSource(source: string): string | null {
 }
 
 /**
+ * Extract zoom option from source code if present
+ * @param source The map source code
+ * @returns Zoom value if found, null otherwise
+ */
+function getZoomFromSource(source: string): number | null {
+    const lines = source.split("\n");
+    for (const line of lines) {
+        if (line.startsWith("#")) {
+            continue;
+        }
+        if (OPTION_REGEX.test(line)) {
+            const match = line.match(OPTION_REGEX);
+            if (match) {
+                const optionStr = match[1].trim();
+                const tokens = optionStr.split(" ");
+                if (tokens.length >= 2 && tokens[0] === "zoom") {
+                    const zoomValue = parseFloat(tokens[1]);
+                    if (!isNaN(zoomValue) && zoomValue > 0) {
+                        return zoomValue;
+                    }
+                }
+            }
+        }
+    }
+    return null;
+}
+
+/**
  * Get the theme constant string based on theme name
  * @param themeName The theme name (gnomeyland, apocalypse, or tag-and-tally)
  * @returns The theme constant string
@@ -210,13 +238,20 @@ export class TextMapper extends MarkdownRenderChild {
         // Get content bounds for pan limits
         this.contentBounds = this.parser.getContentBounds();
         
+        // Extract and apply zoom option from source
+        const zoomFromSource = getZoomFromSource(this.source);
+        if (zoomFromSource !== null) {
+            // Apply zoom, respecting min/max limits
+            this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, zoomFromSource));
+        }
+        
         // Setup event handlers
         this.setupEventHandlers();
         
         // Set initial cursor style and update viewBox
         if (this.svgDomElement) {
             this.svgDomElement.style.cursor = "grab";
-            // Ensure initial viewBox is set correctly (with pan=0, zoom=1)
+            // Ensure initial viewBox is set correctly with the configured zoom
             this.updateViewBox();
         }
     }

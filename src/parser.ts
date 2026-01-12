@@ -259,6 +259,18 @@ export class TextMapperParser {
         } else if (option.key === "global") {
             option.valid = true;
             option.value = true;
+        } else if (option.key === "center-content") {
+            option.valid = true;
+            option.value = true;
+        } else if (option.key === "zoom") {
+            option.valid = true;
+            // Parse zoom option: "option zoom 1.5"
+            if (tokens.length >= 2) {
+                const zoomValue = parseFloat(tokens[1]);
+                if (!isNaN(zoomValue) && zoomValue > 0) {
+                    option.value = zoomValue;
+                }
+            }
         } else if (option.key === "centered-at") {
             option.valid = true;
             // Parse centered-at option: 
@@ -325,7 +337,7 @@ export class TextMapperParser {
 
     /**
      * Calculate initial center point for viewBox
-     * Priority: 1. centered-at option, 2. hex (0,0), 3. first hex, 4. (0,0) coordinate space
+     * Priority: 1. centered-at option, 2. center-content option, 3. hex (0,0), 4. first hex, 5. (0,0) coordinate space
      */
     getInitialCenter(): Point {
         // 1. Check if centered-at option is specified
@@ -334,19 +346,30 @@ export class TextMapperParser {
             return this.orientation.pixels(new Point(center.x, center.y));
         }
 
-        // 2. Check if hex (0, 0) exists in regions
+        // 2. Check if center-content option is specified
+        if (this.options["center-content"]) {
+            const contentBounds = this.getContentBounds();
+            if (contentBounds) {
+                // Calculate center of content bounds
+                const centerX = (contentBounds.minX + contentBounds.maxX) / 2;
+                const centerY = (contentBounds.minY + contentBounds.maxY) / 2;
+                return new Point(centerX, centerY);
+            }
+        }
+
+        // 3. Check if hex (0, 0) exists in regions
         const hex00 = this.regions.find((r) => r.x === 0 && r.y === 0);
         if (hex00) {
             return this.orientation.pixels(new Point(0, 0));
         }
 
-        // 3. Use first hex in regions list
+        // 4. Use first hex in regions list
         if (this.regions.length > 0) {
             const firstRegion = this.regions[0];
             return this.orientation.pixels(new Point(firstRegion.x, firstRegion.y));
         }
 
-        // 4. Fallback to (0, 0) coordinate space
+        // 5. Fallback to (0, 0) coordinate space
         return this.orientation.pixels(new Point(0, 0));
     }
 
