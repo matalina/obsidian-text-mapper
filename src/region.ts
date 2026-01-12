@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { SVGElement } from "./constants";
 import { Point, Orientation } from "./orientation";
 import { NamespaceFunction } from "./constants";

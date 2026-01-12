@@ -1,6 +1,6 @@
 {
     "name": "text-mapper",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Render hex maps in Obsidian. (https://obsidian.md)",
     "main": "main.js",
     "scripts": {

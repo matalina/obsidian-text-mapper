@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
     ATTRIBUTES_REGEX,
     PATH_ATTRIBUTES_REGEX,
@@ -217,7 +218,9 @@ export class TextMapperParser {
         return spline;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     parseAttributes(attrs: string): any {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const output: any = {};
         let matches;
         while ((matches = ATTRIBUTE_MAP_REGEX.exec(attrs))) {
@@ -235,7 +238,9 @@ export class TextMapperParser {
      * The parameters will be parsed into a string[]: ["NAME", "X", "Y", "Z"]
      * The key would be "NAME".
      */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     parseOption(optionStr: string): any {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const option: any = {
             valid: false,
             key: "",
@@ -304,6 +309,7 @@ export class TextMapperParser {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     shape(svgEl: SVGElement, attributes: any) {
         const points = this.orientation
             .hexCorners()
@@ -421,6 +427,7 @@ export class TextMapperParser {
         defsEl.innerHTML = this.defs.join("\n");
 
         // collect region types from attributes and paths in case the sets don't overlap
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const types: any = {};
         for (const region of this.regions) {
             for (const rtype of region.types) {

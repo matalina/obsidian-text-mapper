@@ -5,12 +5,12 @@ import {
     Notice,
     Plugin,
 } from "obsidian";
-import { APOCALYPSE } from "./apocalypse";
+import { APOCALYPSE } from "./themes/apocalypse";
 import { ParseError } from "./error";
-import { GNOMEYLAND } from "./gnomeyland";
+import { GNOMEYLAND } from "./themes/gnomeyland";
 import { TextMapperParser } from "./parser";
-import { TAG_AND_TALLY } from "./tag-and-tally";
-import { OPTION_REGEX } from "./constants";
+import { TAG_AND_TALLY } from "./themes/tag-and-tally";
+import { OPTION_REGEX, SVGElement as CustomSVGElement } from "./constants";
 import {
     DEFAULT_SETTINGS,
     TextMapperSettings,
@@ -146,41 +146,41 @@ function getThemeConstant(themeName: string): string {
 
 export class TextMapper extends MarkdownRenderChild {
     textMapperEl: HTMLDivElement;
-    svgEl: SVGElement | null = null;
+    svgEl: CustomSVGElement | null = null;
     svgDomElement: SVGSVGElement | null = null;
     parser: TextMapperParser | null = null;
-    plugin: Plugin;
+    plugin: TextMapperPlugin;
     private source: string;
     private docId: string;
     
     // Pan and zoom state
-    panX: number = 0;
-    panY: number = 0;
-    zoom: number = 1.0;
-    isDragging: boolean = false;
-    dragStartX: number = 0;
-    dragStartY: number = 0;
-    dragStartPanX: number = 0;
-    dragStartPanY: number = 0;
+    panX = 0;
+    panY = 0;
+    zoom = 1.0;
+    isDragging = false;
+    dragStartX = 0;
+    dragStartY = 0;
+    dragStartPanX = 0;
+    dragStartPanY = 0;
     
     // Touch state
-    touchStartX: number = 0;
-    touchStartY: number = 0;
-    touchStartPanX: number = 0;
-    touchStartPanY: number = 0;
+    touchStartX = 0;
+    touchStartY = 0;
+    touchStartPanX = 0;
+    touchStartPanY = 0;
     
     // Content bounds for pan limits
     contentBounds: { minX: number; maxX: number; minY: number; maxY: number } | null = null;
     
     // Fixed viewBox dimensions
-    fixedViewBoxWidth: number = 800;
-    fixedViewBoxHeight: number = 600;
+    fixedViewBoxWidth = 800;
+    fixedViewBoxHeight = 600;
     
     // Zoom limits
-    minZoom: number = 0.5;
-    maxZoom: number = 4.0;
+    minZoom = 0.5;
+    maxZoom = 4.0;
 
-    constructor(containerEl: HTMLElement, docId: string, source: string, plugin: Plugin) {
+    constructor(containerEl: HTMLElement, docId: string, source: string, plugin: TextMapperPlugin) {
         super(containerEl);
         this.plugin = plugin;
         this.source = source;
@@ -190,16 +190,12 @@ export class TextMapper extends MarkdownRenderChild {
         this.render();
         
         // Register with plugin
-        if (plugin instanceof TextMapperPlugin) {
-            plugin.registerMapper(this);
-        }
+        plugin.registerMapper(this);
     }
 
     onunload() {
         // Unregister from plugin
-        if (this.plugin instanceof TextMapperPlugin) {
-            this.plugin.unregisterMapper(this);
-        }
+        this.plugin.unregisterMapper(this);
         super.onunload();
     }
 
@@ -222,7 +218,7 @@ export class TextMapper extends MarkdownRenderChild {
     private render() {
         // Determine which theme to use
         const themeFromSource = getThemeFromSource(this.source);
-        const themeName = themeFromSource || (this.plugin as TextMapperPlugin).settings.defaultTheme;
+        const themeName = themeFromSource || this.plugin.settings.defaultTheme;
         const themeConstant = getThemeConstant(themeName);
 
         const totalSource = themeConstant.split("\n")
@@ -383,7 +379,8 @@ export class TextMapper extends MarkdownRenderChild {
         
         // Update zoom and pan
         this.zoom = newZoom;
-        const initialCenter = this.parser!.getInitialCenter();
+        if (!this.parser) return;
+        const initialCenter = this.parser.getInitialCenter();
         this.panX = newViewBoxX - (initialCenter.x - newViewBoxWidth / 2);
         this.panY = newViewBoxY - (initialCenter.y - newViewBoxHeight / 2);
         
@@ -392,23 +389,25 @@ export class TextMapper extends MarkdownRenderChild {
     }
     
     getViewBoxX(): number {
-        const initialCenter = this.parser!.getInitialCenter();
+        if (!this.parser) return 0;
+        const initialCenter = this.parser.getInitialCenter();
         const viewBoxWidth = this.fixedViewBoxWidth / this.zoom;
         return initialCenter.x - viewBoxWidth / 2 + this.panX;
     }
     
     getViewBoxY(): number {
-        const initialCenter = this.parser!.getInitialCenter();
+        if (!this.parser) return 0;
+        const initialCenter = this.parser.getInitialCenter();
         const viewBoxHeight = this.fixedViewBoxHeight / this.zoom;
         return initialCenter.y - viewBoxHeight / 2 + this.panY;
     }
     
     applyPanLimits() {
-        if (!this.contentBounds) return;
+        if (!this.contentBounds || !this.parser) return;
         
         const viewBoxWidth = this.fixedViewBoxWidth / this.zoom;
         const viewBoxHeight = this.fixedViewBoxHeight / this.zoom;
-        const initialCenter = this.parser!.getInitialCenter();
+        const initialCenter = this.parser.getInitialCenter();
         
         // Calculate limits based on viewBox boundaries
         // viewBoxX = initialCenter.x - viewBoxWidth/2 + panX
