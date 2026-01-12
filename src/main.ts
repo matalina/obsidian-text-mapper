@@ -1,6 +1,8 @@
 import {
     MarkdownPostProcessorContext,
     MarkdownRenderChild,
+    Menu,
+    Notice,
     Plugin,
 } from "obsidian";
 //import { APOCALYPSE } from "./apocalypse";
@@ -8,14 +10,34 @@ import { ParseError } from "./error";
 //import { GNOMEYLAND } from "./gnomeyland";
 import { TextMapperParser } from "./parser";
 import { TAG_AND_TALLY } from "./tag-and-tally";
+import {
+    DEFAULT_SETTINGS,
+    TextMapperSettings,
+    TextMapperSettingTab,
+} from "./settings";
 
 export default class TextMapperPlugin extends Plugin {
+    settings: TextMapperSettings;
+
     async onload() {
         console.log("Loading Obsidian TextMapper.");
+        
+        await this.loadSettings();
+
+        this.addSettingTab(new TextMapperSettingTab(this.app, this));
+
         this.registerMarkdownCodeBlockProcessor(
             "text-mapper",
             this.processMarkdown.bind(this)
         );
+    }
+
+    async loadSettings() {
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    }
+
+    async saveSettings() {
+        await this.saveData(this.settings);
     }
 
     async processMarkdown(
@@ -24,7 +46,7 @@ export default class TextMapperPlugin extends Plugin {
         ctx: MarkdownPostProcessorContext
     ): Promise<any> {
         try {
-            ctx.addChild(new TextMapper(el, ctx.docId, source));
+            ctx.addChild(new TextMapper(el, ctx.docId, source, this));
         } catch (e) {
             console.log("text mapper error", e);
             ctx.addChild(new ParseError(el));
@@ -39,6 +61,7 @@ export class TextMapper extends MarkdownRenderChild {
     svgEl: SVGElement | null = null;
     svgDomElement: SVGSVGElement | null = null;
     parser: TextMapperParser | null = null;
+    plugin: Plugin;
     
     // Pan and zoom state
     panX: number = 0;
@@ -67,8 +90,9 @@ export class TextMapper extends MarkdownRenderChild {
     minZoom: number = 0.5;
     maxZoom: number = 4.0;
 
-    constructor(containerEl: HTMLElement, docId: string, source: string) {
+    constructor(containerEl: HTMLElement, docId: string, source: string, plugin: Plugin) {
         super(containerEl);
+        this.plugin = plugin;
         this.textMapperEl = this.containerEl.createDiv({ cls: "textmapper" });
 
         const totalSource = TAG_AND_TALLY.split("\n")
@@ -115,6 +139,9 @@ export class TextMapper extends MarkdownRenderChild {
         
         // Wheel event for zooming
         svgElement.addEventListener("wheel", this.handleWheel.bind(this), { passive: false });
+        
+        // Context menu event for save option
+        svgElement.addEventListener("contextmenu", this.handleContextMenu.bind(this));
     }
     
     handleMouseDown(e: MouseEvent) {
@@ -275,5 +302,148 @@ export class TextMapper extends MarkdownRenderChild {
             "viewBox",
             `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`
         );
+    }
+    
+    handleContextMenu(e: MouseEvent) {
+        if (!this.svgDomElement) return;
+        
+        e.preventDefault();
+        
+        const menu = new Menu();
+        menu.addItem((item) => {
+            item
+                .setTitle("Save canvas as PNG")
+                .setIcon("download")
+                .onClick(() => {
+                    this.saveSvgAsPng();
+                });
+        });
+        
+        menu.showAtPosition({ x: e.clientX, y: e.clientY });
+    }
+    
+    async saveSvgAsPng() {
+        if (!this.svgDomElement || !this.parser) {
+            new Notice("Error: SVG element not found");
+            return;
+        }
+        
+        try {
+            // Get the full content bounds for the PNG
+            const contentBounds = this.parser.getContentBounds();
+            if (!contentBounds) {
+                new Notice("Error: Could not determine map bounds");
+                return;
+            }
+            
+            // Calculate dimensions based on content bounds
+            const width = contentBounds.maxX - contentBounds.minX;
+            const height = contentBounds.maxY - contentBounds.minY;
+            
+            // Create a clone of the SVG with the full viewBox
+            const svgClone = this.svgDomElement.cloneNode(true) as SVGSVGElement;
+            svgClone.setAttribute("viewBox", `${contentBounds.minX} ${contentBounds.minY} ${width} ${height}`);
+            svgClone.setAttribute("width", width.toString());
+            svgClone.setAttribute("height", height.toString());
+            
+            // Serialize SVG to string
+            const svgData = new XMLSerializer().serializeToString(svgClone);
+            const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+            const svgUrl = URL.createObjectURL(svgBlob);
+            
+            // Create canvas and draw SVG
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            
+            if (!ctx) {
+                new Notice("Error: Could not create canvas context");
+                URL.revokeObjectURL(svgUrl);
+                return;
+            }
+            
+            // Fill white background
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, width, height);
+            
+            // Load SVG as image and draw on canvas
+            const img = new Image();
+            
+            await new Promise<void>((resolve, reject) => {
+                img.onload = () => {
+                    try {
+                        ctx.drawImage(img, 0, 0, width, height);
+                        URL.revokeObjectURL(svgUrl);
+                        resolve();
+                    } catch (error) {
+                        URL.revokeObjectURL(svgUrl);
+                        reject(error);
+                    }
+                };
+                img.onerror = () => {
+                    URL.revokeObjectURL(svgUrl);
+                    reject(new Error("Failed to load SVG image"));
+                };
+                img.src = svgUrl;
+            });
+            
+            // Convert canvas to blob
+            const blob = await new Promise<Blob>((resolve, reject) => {
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve(blob);
+                    } else {
+                        reject(new Error("Failed to convert canvas to blob"));
+                    }
+                }, "image/png");
+            });
+            
+            // Get current file to determine save location
+            const activeFile = this.plugin.app.workspace.getActiveFile();
+            let basePath = "";
+            let baseName = "text-mapper-export";
+            
+            if (activeFile) {
+                const filePath = activeFile.path;
+                const lastSlash = filePath.lastIndexOf("/");
+                if (lastSlash >= 0) {
+                    basePath = filePath.substring(0, lastSlash + 1);
+                }
+                baseName = activeFile.basename;
+            }
+            
+            // Use settings save location if configured
+            let savePath = "";
+            if (this.plugin.settings.saveLocation) {
+                // Ensure the folder exists
+                const folderPath = this.plugin.settings.saveLocation;
+                const folder = this.plugin.app.vault.getAbstractFileByPath(folderPath);
+                if (!folder) {
+                    try {
+                        await this.plugin.app.vault.createFolder(folderPath);
+                    } catch (error) {
+                        // Folder might already exist or path might be invalid
+                        console.warn("Could not create folder:", error);
+                    }
+                }
+                savePath = folderPath.endsWith("/") ? folderPath : folderPath + "/";
+            } else {
+                // If no save location is set, save in the same folder as the current note
+                savePath = basePath;
+            }
+            
+            // Generate filename with timestamp
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
+            const filename = `${savePath}${baseName}-${timestamp}.png`;
+            
+            // Save file
+            await this.plugin.app.vault.createBinary(filename, await blob.arrayBuffer());
+            
+            new Notice(`Canvas saved as ${filename}`);
+        } catch (error) {
+            console.error("Error saving SVG as PNG:", error);
+            new Notice(`Error saving canvas: ${error instanceof Error ? error.message : "Unknown error"}`);
+        }
     }
 }
